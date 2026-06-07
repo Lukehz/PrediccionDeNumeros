@@ -1,214 +1,460 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Examen</title>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reconocimiento de dígitos — CNN · TensorFlow.js</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 
-    <style>
-      #resultado {
-        font-weight:  bold;
-        font-size:  6rem;
-        text-align: center;
-      }
+  <link rel="stylesheet" href="css/styles.css">
 
-      .canvas-container {
-          margin: 0 auto;
-          border: 1px solid #ccc;
-      }
-    </style>
+  <!-- TensorFlow.js 4.x: coincide con el converter (4.20.0) usado para exportar el modelo -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 
-  </head>
-  <body>
-    
-    <main>
-      <div class="px-4 py-2 my-2 text-center border-bottom">
-        <img class="d-block mx-auto mb-2" src="Logo_Duoc.png" alt="" width="400" height="100">
-        <h1 class="display-5 fw-bold">Implementacion de Red Neuronal Convolusional</h1>
-        <div class="col-lg-6 mx-auto">
-          <h2 class="lead mb-0 fw-bold">Predicci&oacute;n de n&uacute;meros escritos a mano utilizando Tensorflow.js</h2>
+  <!-- Estilos del visualizador de arquitectura (estilo TensorFlow Playground) -->
+  <style>
+    .archviz{margin-top:18px;border-top:1px solid var(--line);padding-top:18px;position:relative}
+    .av-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+    .av-run{font-family:"Sora",sans-serif;font-weight:700;border:none;border-radius:11px;
+      padding:10px 18px;cursor:pointer;background:var(--yellow);color:#1a1205;font-size:.9rem;
+      transition:filter .15s,transform .08s}
+    .av-run:hover{filter:brightness(1.06)} .av-run:active{transform:translateY(1px)}
+    .av-run.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+    .av-run.ghost:hover{border-color:var(--yellow)}
+    .av-lbl{font-size:.8rem;color:var(--muted)}
+    .av-chips{display:flex;gap:5px;flex-wrap:wrap}
+    .av-chip{min-width:34px;height:34px;padding:0 6px;border-radius:10px;border:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+      color:var(--ink);font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:.9rem;
+      cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+      transition:transform .1s,border-color .15s,color .15s,background .15s,box-shadow .15s}
+    .av-chip:hover{border-color:var(--yellow);color:var(--yellow);transform:translateY(-1px)}
+    .av-chip:active{transform:translateY(0)}
+    .av-chip.active{background:linear-gradient(180deg,var(--yellow),var(--yellow-d));color:#1a1205;
+      border-color:var(--yellow);box-shadow:0 6px 16px -6px rgba(246,180,36,.6)}
+
+    /* interruptor "repetir" */
+    .av-toggle{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:.8rem;
+      color:var(--muted);user-select:none;transition:color .15s}
+    .av-toggle:hover{color:var(--ink)}
+    .av-toggle input{position:absolute;opacity:0;width:0;height:0}
+    .av-toggle .track{width:40px;height:22px;border-radius:999px;background:rgba(255,255,255,.06);
+      border:1px solid var(--line);position:relative;transition:background .2s,border-color .2s;flex:0 0 auto}
+    .av-toggle .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+      background:var(--muted);transition:transform .22s cubic-bezier(.4,1.4,.5,1),background .2s}
+    .av-toggle input:checked + .track{background:rgba(246,180,36,.22);border-color:var(--yellow)}
+    .av-toggle input:checked + .track .knob{transform:translateX(18px);background:var(--yellow)}
+    .av-toggle:hover .track{border-color:var(--yellow)}
+    .av-toggle input:focus-visible + .track{box-shadow:0 0 0 3px rgba(246,180,36,.3)}
+    .av-tip{font-size:.78rem;color:var(--muted);margin:0 0 10px}
+    .av-tip b{color:var(--yellow)}
+
+    .av-scroll{overflow-x:auto;padding:4px 0 8px}
+    #avSvg{display:block;width:100%;height:auto;min-width:680px}
+
+    /* cables (conexiones con peso) */
+    .wire{fill:none;stroke-linecap:round;transition:stroke-opacity .25s}
+    .wire.flow{stroke-dasharray:5 9;animation:av-march .55s linear infinite}
+    @keyframes av-march{to{stroke-dashoffset:-14}}
+
+    /* cajas */
+    .av-box rect{transition:stroke .25s, filter .25s}
+    .av-box.lit rect{stroke:var(--yellow);stroke-width:2;filter:drop-shadow(0 0 6px rgba(246,180,36,.75))}
+    .av-box.win rect{stroke:var(--good);stroke-width:2.4;filter:drop-shadow(0 0 8px rgba(56,211,159,.9))}
+    .av-coltitle{font-family:"Sora",sans-serif;font-weight:700;fill:var(--ink)}
+    .av-colshape{font-family:"IBM Plex Mono",monospace;fill:var(--yellow)}
+    .av-colbadge{font-family:"IBM Plex Mono",monospace;fill:var(--muted)}
+    .av-outlab{font-family:"IBM Plex Mono",monospace;fill:var(--muted);font-weight:600}
+    .av-outlab.win{fill:var(--good)}
+    .av-digit{font-family:"Sora",sans-serif;font-weight:800;fill:#fff}
+
+    /* zonas clickeables */
+    .av-hit{fill:transparent;cursor:pointer}
+    .av-hit:hover{fill:rgba(246,180,36,.07)}
+
+    .av-caption{font-size:.84rem;color:var(--ink);margin:6px 0 0;min-height:1.3em}
+    .av-caption b{color:var(--yellow)}
+    .av-legend{font-size:.76rem;color:var(--muted);margin-top:10px;line-height:1.5}
+    .av-legend i{display:inline-block;width:18px;height:3px;border-radius:3px;vertical-align:2px;margin:0 4px}
+    .av-legend .pos{background:var(--yellow)} .av-legend .neg{background:#3b82f6}
+
+    /* popup explicativo */
+    .av-backdrop{position:fixed;inset:0;background:rgba(5,12,24,.55);backdrop-filter:blur(2px);
+      z-index:999;display:none}
+    .av-backdrop.open{display:block}
+    .av-pop{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;
+      width:min(440px,92vw);max-height:84vh;overflow:auto;display:none;
+      background:linear-gradient(180deg,var(--panel),var(--navy-2));
+      border:1px solid var(--yellow);border-radius:16px;padding:20px 22px;
+      box-shadow:0 30px 70px -20px rgba(0,0,0,.85)}
+    .av-pop.open{display:block;animation:av-in .18s ease}
+    @keyframes av-in{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
+    .av-pop .x{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);
+      font-size:1.4rem;line-height:1;cursor:pointer;font-family:"Sora"}
+    .av-pop .x:hover{color:var(--ink)}
+    .av-pop .pk{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--yellow);
+      text-transform:uppercase;letter-spacing:.08em}
+    .av-pop h4{font-family:"Sora",sans-serif;margin:4px 0 12px;font-size:1.12rem;letter-spacing:-.01em}
+    .av-pop p{margin:0 0 10px;font-size:.88rem;line-height:1.55;color:var(--ink)}
+    .av-pop .case{background:rgba(246,180,36,.09);border-left:3px solid var(--yellow);
+      padding:10px 12px;border-radius:8px;font-size:.86rem;line-height:1.5;color:var(--ink)}
+    .av-pop .case .h{display:block;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+      color:var(--yellow);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+    .av-pop .case b{color:var(--yellow)}
+  </style>
+</head>
+<body>
+  <header>
+    <img src="assets/Logo_Duoc.png" alt="Duoc UC">
+    <h1>Red Neuronal <b>Convolucional</b></h1>
+    <p>Predicción de dígitos escritos a mano con TensorFlow.js</p>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+
+      <!-- Dibujo -->
+      <section class="card canvas-stage">
+        <p class="hint">Dibuja un número del 0 al 9. El dígito se centra y reescala solo, así que no importa el tamaño ni la posición.</p>
+        <div class="pad">
+          <canvas id="board" width="280" height="280"></canvas>
         </div>
-      </div>
 
-      <div class="b-example-divider"></div>
+        <div class="brush">
+          <span>Grosor</span>
+          <input id="brush" type="range" min="10" max="34" value="22">
+        </div>
 
+        <div class="tools">
+          <button class="btn-clear" id="btnClear">Limpiar</button>
+          <button class="btn-pred" id="btnPred" disabled>Predecir</button>
+        </div>
 
+        <span class="status"><span id="dot" class="dot loading"></span><span id="statusTxt">Cargando modelo…</span></span>
+      </section>
 
-      <div class="container mt-5">
-        <div class="row">
-          <div class="col-12 col-md-4 offset-md-4">
-            <div id="canvas-container">
-              <div><i>Dibuja el n&uacute;mero grande y centrado para tener una mejor predicci&oacute;n</i></div>
-              <canvas id="bigcanvas" width="200" height="200"></canvas>
-              <canvas id="smallcanvas" width="28" height="28" style="display: none"></canvas>
-            </div>
-            <div class="text-center mt-3">
-              <button class="btn btn-primary" id="limpiar" onclick="limpiar()">Limpiar</button>
-              <button class="btn btn-success" id="predecir" onclick="predecir()">Predecir</button>
-              <div id="resultado"></div>
-            </div>
-            
+      <!-- Resultado + transparencia -->
+      <section class="card">
+        <h3>Resultado</h3>
+        <div class="result-head">
+          <div id="big" class="big empty">–</div>
+          <div class="conf" id="conf">Esperando un trazo…</div>
+        </div>
+
+        <p class="hint" style="text-align:left;max-width:none;margin:4px 0 0">
+          La red no responde “un número”: entrega una <b>probabilidad para cada dígito</b>.
+          Estas son las 10 salidas (suman 100%). El dígito predicho es simplemente el de mayor probabilidad.
+        </p>
+
+        <div class="probs" id="probs"></div>
+
+        <div class="footer-row">
+          <div class="preview">
+            <canvas id="preview28" width="28" height="28"></canvas>
+            <span>Lo que “ve” la red<br>(imagen real de 28×28 px)</span>
           </div>
         </div>
+      </section>
+
+    </div>
+
+    <!-- ¿Cómo funciona? -->
+    <section class="card explain">
+      <h3>¿Cómo funciona la predicción?</h3>
+      <div class="pipeline">
+        <div class="step"><div class="n">01</div><h4>Dibujas</h4><p>Tu trazo se captura en blanco sobre negro, igual que las imágenes con las que se entrenó la red (dataset MNIST).</p></div>
+        <div class="step"><div class="n">02</div><h4>Preprocesamiento</h4><p>Se recorta el dígito, se escala a 20px y se centra por su centro de masa dentro de un lienzo de 28×28.</p></div>
+        <div class="step"><div class="n">03</div><h4>Capas convolucionales</h4><p>3 capas Conv2D (32→64→128 filtros) detectan bordes, curvas y formas cada vez más complejas. Cada MaxPooling reduce el tamaño a la mitad.</p></div>
+        <div class="step"><div class="n">04</div><h4>Capas densas</h4><p>Se aplana a 1152 valores y pasan por una capa Dense de 512 neuronas que combina todas las formas detectadas.</p></div>
+        <div class="step"><div class="n">05</div><h4>Softmax</h4><p>La capa final de 10 neuronas usa softmax: convierte todo en 10 probabilidades que suman 100% (una por dígito).</p></div>
+        <div class="step"><div class="n">06</div><h4>Decisión</h4><p>Se elige el dígito con la probabilidad más alta. Eso es lo que ves arriba con su nivel de confianza.</p></div>
       </div>
 
-      <div class="b-example-divider"></div>
+      <!-- Visualizador de la arquitectura (estilo TensorFlow Playground) -->
+      <h3 style="margin-top:22px">Arquitectura del modelo · recorrido en vivo</h3>
+      <div class="archviz">
+        <div class="av-bar">
+          <button class="av-run" id="avRun">▶ Ejecutar</button>
+          <button class="av-run ghost" id="avReset">Reiniciar</button>
+          <span class="av-lbl">Entrada de ejemplo:</span>
+          <div class="av-chips" id="avChips"></div>
+          <label class="av-toggle" style="margin-left:auto">
+            <input type="checkbox" id="avLoop">
+            <span class="track"><span class="knob"></span></span>
+            repetir
+          </label>
+        </div>
+        <p class="av-tip">💡 <b>Dibuja arriba</b> y el diagrama reacciona en vivo. <b>Haz clic en cualquier capa</b> para ver qué hace.</p>
 
+        <div class="av-scroll"><div id="avHost"></div></div>
 
-      <div class="b-example-divider mb-0"></div>
-    </main>
+        <p class="av-caption" id="avCaption">Elige un dígito y pulsa <b>Ejecutar</b> para ver cómo la imagen atraviesa la red.</p>
+        <p class="av-legend">
+          Estructura <b>fija e idéntica</b> a tu modelo. Cada caja es una neurona/mapa; los cables muestran
+          conexiones: <i class="pos"></i>peso positivo, <i class="neg"></i>peso negativo, y el grosor es su magnitud.
+          Los mapas y los pesos son ilustrativos; las formas (28×28×1, 14×14×32, …) y las capas son las reales.
+        </p>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+        <!-- popup -->
+        <div class="av-backdrop" id="avBackdrop"></div>
+        <div class="av-pop" id="avPop" role="dialog" aria-modal="true">
+          <button class="x" id="avPopX" aria-label="Cerrar">×</button>
+          <div class="pk" id="avPopKind"></div>
+          <h4 id="avPopTitle"></h4>
+          <div id="avPopBody"></div>
+        </div>
+      </div>
+    </section>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
-    <script src="fabric.min.js"></script>
-    <script src="drawing.js"></script>
+  <footer>Duoc UC · CNN entrenada con MNIST · ejecución 100% en el navegador</footer>
 
-    <script type="text/javascript">
+  <script src="js/app.js"></script>
 
-      var modelo = null;
+  <!-- Lógica del visualizador de arquitectura -->
+  <script>
+  (function(){
+    "use strict";
+    const NS = "http://www.w3.org/2000/svg";
 
-      //Tomar y configurar el canvas
-      var canvas = document.getElementById("bigcanvas");
-      var ctx1 = canvas.getContext("2d");
-      var smallcanvas = document.getElementById("smallcanvas");
-      var ctx2= smallcanvas.getContext("2d");
+    // ----- Arquitectura REAL (de model.json) -----
+    const COLS = [
+      {name:"Imagen",  shape:"28×28×1",  badge:"entrada",  boxes:1,  kind:"input"},
+      {name:"Conv2D",  shape:"28×28×32", badge:"32 · 3×3 · ReLU", boxes:5, kind:"conv"},
+      {name:"MaxPool", shape:"14×14×32", badge:"2×2",      boxes:5,  kind:"pool"},
+      {name:"Conv2D",  shape:"14×14×64", badge:"64 · 3×3 · ReLU", boxes:5, kind:"conv"},
+      {name:"MaxPool", shape:"7×7×64",   badge:"2×2",      boxes:5,  kind:"pool"},
+      {name:"Conv2D",  shape:"7×7×128",  badge:"128 · 3×3 · ReLU",boxes:6, kind:"conv"},
+      {name:"MaxPool", shape:"3×3×128",  badge:"2×2",      boxes:5,  kind:"pool"},
+      {name:"Flatten", shape:"1152",     badge:"aplanar",  boxes:6,  kind:"flat"},
+      {name:"Dense",   shape:"512",      badge:"512 · ReLU",boxes:6,  kind:"dense"},
+      {name:"Softmax", shape:"10",       badge:"salida",   boxes:10, kind:"output"},
+    ];
 
-      function limpiar() {
-          ctx1.clearRect(0, 0, canvas.width, canvas.height);
-          drawingcanvas.clear();
+    // ----- Explicación por capa (popup) -----
+    const INFO = [
+      { pk:"Entrada", title:"Imagen · 28×28×1",
+        paras:["Es lo que “ve” la red: tu dígito ya preprocesado a una imagen de 28×28 píxeles en escala de grises (un solo canal). Cada píxel es un número entre 0 (negro) y 1 (blanco)."],
+        caso:"Entra como un tensor de forma <b>[1, 28, 28, 1]</b>. El último 1 es el único canal (gris); una foto a color tendría 3 (RGB)." },
+      { pk:"Convolución", title:"Conv2D · 32 filtros 3×3",
+        paras:["Desliza 32 filtros de 3×3 por toda la imagen. Cada filtro aprende a detectar un patrón simple —un borde, una línea, una curva— y “se enciende” donde lo encuentra.",
+               "La activación <b>ReLU</b> deja en cero los valores negativos: se queda solo con la evidencia útil."],
+        caso:"32 filtros → <b>32 mapas de características</b>, forma <b>28×28×32</b>. La resolución se mantiene gracias al padding “same”." },
+      { pk:"Submuestreo", title:"MaxPooling · 2×2",
+        paras:["Divide cada mapa en bloques de 2×2 y conserva solo el valor máximo de cada bloque. Se queda con lo más fuerte y descarta el resto."],
+        caso:"Reduce el alto y ancho a la mitad: de 28×28 a <b>14×14</b> (los 32 mapas se mantienen). Hace la red más liviana y tolerante a que el trazo esté algo corrido." },
+      { pk:"Convolución", title:"Conv2D · 64 filtros 3×3",
+        paras:["Segunda convolución. Ahora los filtros no miran píxeles sueltos, sino los patrones detectados antes, y los combinan en formas más complejas (esquinas, arcos)."],
+        caso:"64 filtros → forma <b>14×14×64</b>. Más filtros = puede reconocer más variedad de formas." },
+      { pk:"Submuestreo", title:"MaxPooling · 2×2",
+        paras:["Otra vez toma el máximo de cada bloque de 2×2 para resumir la información y reducir el tamaño."],
+        caso:"De 14×14 a <b>7×7</b> (64 mapas)." },
+      { pk:"Convolución", title:"Conv2D · 128 filtros 3×3",
+        paras:["Tercera convolución, la más profunda. Combina las formas anteriores en patrones muy abstractos: ya casi “partes de dígitos”."],
+        caso:"128 filtros → forma <b>7×7×128</b>. Cuanto más profunda la capa, más abstracto lo que representa." },
+      { pk:"Submuestreo", title:"MaxPooling · 2×2",
+        paras:["Última reducción de tamaño tomando el máximo de cada 2×2."],
+        caso:"De 7×7 a <b>3×3</b> (128 mapas)." },
+      { pk:"Aplanado", title:"Flatten",
+        paras:["Hasta aquí los datos eran una rejilla (alto × ancho × mapas). Flatten los estira en una sola fila de números para conectarlos a una capa densa tradicional."],
+        caso:"3 × 3 × 128 = <b>1152 valores</b> en un vector. No hace cálculo: solo reorganiza." },
+      { pk:"Capa densa", title:"Dense · 512 · ReLU",
+        paras:["Capa totalmente conectada: cada una de las 512 neuronas mira los 1152 valores a la vez y aprende combinaciones que ayudan a distinguir un dígito de otro."],
+        caso:"Es el “razonamiento” final antes de decidir: <b>1152 entradas → 512 neuronas</b>." },
+      { pk:"Salida", title:"Dense · Softmax · 10",
+        paras:["10 neuronas, una por cada dígito (0–9). La función <b>Softmax</b> convierte sus valores en 10 probabilidades que suman 100%."],
+        caso:"La probabilidad más alta es la predicción. Si el “3” sale 0.92, la red dice <b>“3” con 92% de confianza</b>." },
+    ];
+
+    const W=940, H=430, TOP=64, BOT=H-22, MIDY=(TOP+BOT)/2;
+    const LP=58, RP=46, STEP=(W-LP-RP)/(COLS.length-1);
+
+    let _s=987654321;
+    const rnd=()=>{_s=(_s*1103515245+12345)&0x7fffffff;return _s/0x7fffffff;};
+    const bw = k => k==="input"?44 : k==="output"?20 : 24;
+
+    function layout(){
+      return COLS.map((c,ci)=>{
+        const w=bw(c.kind), gap=c.kind==="output"?7:12;
+        const total=c.boxes*w+(c.boxes-1)*gap, top=MIDY-total/2, cx=LP+ci*STEP;
+        const boxes=[];
+        for(let i=0;i<c.boxes;i++) boxes.push({cx, cy: top+w/2+i*(w+gap), w});
+        return {...c, cx, boxes, w};
+      });
+    }
+
+    function gradientDefs(){
+      let d="";
+      for(let i=0;i<14;i++){
+        const split=Math.round(28+rnd()*44);
+        const a = rnd()>0.5 ? {x2:1,y2:1} : (rnd()>0.5?{x2:1,y2:0}:{x2:0,y2:1});
+        d+=`<linearGradient id="avg${i}" x1="0" y1="0" x2="${a.x2}" y2="${a.y2}">
+          <stop offset="0%" stop-color="#3b82f6"/><stop offset="${split}%" stop-color="#3b82f6"/>
+          <stop offset="${split}%" stop-color="#f6b424"/><stop offset="100%" stop-color="#f6b424"/>
+        </linearGradient>`;
+      }
+      return `<defs>${d}</defs>`;
+    }
+
+    let current=3;
+    function buildSVG(){
+      const cols=layout();
+      let wires="", boxes="", labels="", hits="";
+
+      for(let g=0; g<cols.length-1; g++){
+        for(const a of cols[g].boxes) for(const b of cols[g+1].boxes){
+          const x1=a.cx+a.w/2, y1=a.cy, x2=b.cx-b.w/2, y2=b.cy, dx=(x2-x1)*0.5;
+          const sign=rnd()>0.5, mag=rnd();
+          const col=sign?"246,180,36":"59,130,246";
+          wires+=`<path class="wire g${g}" d="M${x1} ${y1} C ${x1+dx} ${y1} ${x2-dx} ${y2} ${x2} ${y2}"
+                   stroke="rgba(${col},${(0.18+mag*0.4).toFixed(2)})" stroke-width="${(0.45+mag*1.9).toFixed(2)}"/>`;
+        }
       }
 
-      function predecir() {
-            //Pasar canvas a version 28x28
-            resample_single(canvas, 28, 28, smallcanvas);
+      cols.forEach((c,ci)=>{
+        labels+=`<text class="av-coltitle" x="${c.cx}" y="26" text-anchor="middle" font-size="12">${c.name}</text>
+                 <text class="av-colshape" x="${c.cx}" y="42" text-anchor="middle" font-size="10.5">${c.shape}</text>
+                 <text class="av-colbadge" x="${c.cx}" y="${BOT+16}" text-anchor="middle" font-size="9">${c.badge}</text>`;
+        c.boxes.forEach((b,bi)=>{
+          const r=b.w/2, gi=(ci*3+bi)%14;
+          if(c.kind==="input"){
+            boxes+=`<g class="av-box" data-col="${ci}">
+                <rect x="${b.cx-r}" y="${b.cy-r}" width="${b.w}" height="${b.w}" rx="6" fill="#000" stroke="var(--line)" stroke-width="1"/>
+                <image id="avInputImg" x="${b.cx-r}" y="${b.cy-r}" width="${b.w}" height="${b.w}" preserveAspectRatio="none" style="image-rendering:pixelated;opacity:0"/>
+                <text id="avDigit" class="av-digit" x="${b.cx}" y="${b.cy+1}" text-anchor="middle" dominant-baseline="middle" font-size="30">${current}</text>
+              </g>`;
+          } else if(c.kind==="output"){
+            boxes+=`<g class="av-box" data-col="${ci}" data-d="${bi}">
+                <rect x="${b.cx-r}" y="${b.cy-r}" width="${b.w}" height="${b.w}" rx="5" fill="url(#avg${gi})" stroke="var(--line)" stroke-width="1"/>
+              </g>
+              <text class="av-outlab" data-d="${bi}" x="${b.cx+r+8}" y="${b.cy+1}" dominant-baseline="middle" font-size="11">${bi}</text>`;
+          } else {
+            boxes+=`<g class="av-box" data-col="${ci}">
+                <rect x="${b.cx-r}" y="${b.cy-r}" width="${b.w}" height="${b.w}" rx="5" fill="url(#avg${gi})" stroke="var(--line)" stroke-width="1"/>
+              </g>`;
+          }
+        });
+        // zona clickeable de toda la columna
+        const hw=Math.min(STEP*0.86, 84);
+        hits+=`<rect class="av-hit" data-col="${ci}" x="${c.cx-hw/2}" y="8" width="${hw}" height="${H-24}"/>`;
+      });
 
-            var imgData = ctx2.getImageData(0,0,28,28);
-            var arr = []; //El arreglo completo
-            var arr28 = []; //Al llegar a 28 posiciones se pone en 'arr' como un nuevo indice
-            for (var p=0, i=0; p < imgData.data.length; p+=4) {
-                var valor = imgData.data[p+3]/255;
-                arr28.push([valor]); //Agregar al arr28 y normalizar a 0-1. Aparte queda dentro de un arreglo en el indice 0... again
-                if (arr28.length == 28) {
-                    arr.push(arr28);
-                    arr28 = [];
-                }
-            }
+      document.getElementById("avHost").innerHTML =
+        `<svg id="avSvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="${NS}">
+           ${gradientDefs()}<g>${wires}</g>${boxes}${labels}${hits}
+         </svg>`;
+    }
 
-            arr = [arr]; //Meter el arreglo en otro arreglo por que si no tio tensorflow se enoja >:(
-            //Nah basicamente Debe estar en un arreglo nuevo en el indice 0, por ser un tensor4d en forma 1, 28, 28, 1
-            var tensor4 = tf.tensor4d(arr);
-            var resultados = modelo.predict(tensor4).dataSync();
-            var mayorIndice = resultados.indexOf(Math.max.apply(null, resultados));
-            
-            console.log("Prediccion", mayorIndice);
-            console.log("resultados", resultados);
-            document.getElementById("resultado").innerHTML = mayorIndice;
-        }
+    // ----- popup -----
+    const pop=document.getElementById("avPop"), backdrop=document.getElementById("avBackdrop");
+    function openPop(i){
+      const info=INFO[i]; if(!info) return;
+      document.getElementById("avPopKind").textContent=info.pk;
+      document.getElementById("avPopTitle").textContent=info.title;
+      document.getElementById("avPopBody").innerHTML=
+        info.paras.map(p=>`<p>${p}</p>`).join("") +
+        `<div class="case"><span class="h">En tu modelo</span>${info.caso}</div>`;
+      pop.classList.add("open"); backdrop.classList.add("open");
+    }
+    function closePop(){ pop.classList.remove("open"); backdrop.classList.remove("open"); }
+    document.getElementById("avPopX").addEventListener("click",closePop);
+    backdrop.addEventListener("click",closePop);
+    document.addEventListener("keydown",e=>{ if(e.key==="Escape") closePop(); });
 
-        /**
-         * Hermite resize - fast image resize/resample using Hermite filter. 1 cpu version!
-         * 
-         * @param {HtmlElement} canvas
-         * @param {int} width
-         * @param {int} height
-         * @param {boolean} resize_canvas if true, canvas will be resized. Optional.
-         * Cambiado por RT, resize canvas ahora es donde se pone el chiqitillllllo
-         */
-        function resample_single(canvas, width, height, resize_canvas) {
-            var width_source = canvas.width;
-            var height_source = canvas.height;
-            width = Math.round(width);
-            height = Math.round(height);
+    // ----- chips -----
+    const chips=document.getElementById("avChips");
+    for(let d=0;d<10;d++){
+      const b=document.createElement("button");
+      b.className="av-chip"+(d===current?" active":""); b.textContent=d; b.dataset.d=d;
+      chips.appendChild(b);
+    }
+    chips.addEventListener("click",e=>{
+      const b=e.target.closest(".av-chip"); if(!b) return;
+      current=+b.dataset.d;
+      chips.querySelectorAll(".av-chip").forEach(x=>x.classList.toggle("active",x===b));
+      const dg=document.getElementById("avDigit"); if(dg) dg.textContent=current;
+      reset();
+    });
 
-            var ratio_w = width_source / width;
-            var ratio_h = height_source / height;
-            var ratio_w_half = Math.ceil(ratio_w / 2);
-            var ratio_h_half = Math.ceil(ratio_h / 2);
+    // ----- distribución de ejemplo -----
+    const CONFUSE={0:[6,8],1:[7],2:[7,3],3:[8,5],4:[9],5:[6,3],6:[0,5],7:[1,9],8:[3,0],9:[4,7]};
+    function example(d){
+      const p=new Array(10).fill(0.004); p[d]=0.90;
+      (CONFUSE[d]||[]).forEach((c,i)=>p[c]=i===0?0.06:0.025);
+      const s=p.reduce((a,b)=>a+b,0); return p.map(v=>v/s);
+    }
 
-            var ctx = canvas.getContext("2d");
-            var ctx2 = resize_canvas.getContext("2d");
-            var img = ctx.getImageData(0, 0, width_source, height_source);
-            var img2 = ctx2.createImageData(width, height);
-            var data = img.data;
-            var data2 = img2.data;
+    // ----- animación -----
+    let timers=[], busy=false, live=false;
+    const clearT=()=>{timers.forEach(clearTimeout);timers=[];};
+    function reset(){
+      clearT(); busy=false; live=false;
+      document.querySelectorAll("#avSvg .av-box").forEach(x=>x.classList.remove("lit","win"));
+      document.querySelectorAll("#avSvg .av-outlab").forEach(x=>x.classList.remove("win"));
+      document.querySelectorAll("#avSvg .wire").forEach(x=>x.classList.remove("flow"));
+      const dg=document.getElementById("avDigit"); if(dg) dg.style.display="";
+      const img=document.getElementById("avInputImg"); if(img) img.style.opacity=0;
+      document.getElementById("avCaption").innerHTML='Dibuja un número arriba y el diagrama reacciona <b>en vivo</b> — o elige un dígito y pulsa <b>Ejecutar</b>.';
+    }
+    function run(){
+      reset(); busy=true; const step=380;
+      COLS.forEach((c,i)=>{
+        timers.push(setTimeout(()=>{
+          document.querySelectorAll(`#avSvg .av-box[data-col="${i}"]`).forEach(x=>x.classList.add("lit"));
+          if(i>0) document.querySelectorAll(`#avSvg .wire.g${i-1}`).forEach(x=>x.classList.add("flow"));
+        }, i*step));
+      });
+      timers.push(setTimeout(()=>{
+        const probs=example(current), win=current;
+        document.querySelector(`#avSvg .av-box[data-d="${win}"]`)?.classList.add("win");
+        document.querySelector(`#avSvg .av-outlab[data-d="${win}"]`)?.classList.add("win");
+        const top3=probs.map((p,d)=>[d,p]).sort((a,b)=>b[1]-a[1]).slice(0,3)
+                    .map(([d,p])=>`${d}: ${Math.round(p*100)}%`).join(" · ");
+        document.getElementById("avCaption").innerHTML=`Para el dígito de ejemplo, la red activa con más fuerza la salida <b>${win}</b>. &nbsp;<span style="color:var(--muted)">${top3}</span>`;
+        busy=false;
+        if(document.getElementById("avLoop").checked) timers.push(setTimeout(run,1500));
+      }, COLS.length*step));
+    }
 
-            for (var j = 0; j < height; j++) {
-                for (var i = 0; i < width; i++) {
-                    var x2 = (i + j * width) * 4;
-                    var weight = 0;
-                    var weights = 0;
-                    var weights_alpha = 0;
-                    var gx_r = 0;
-                    var gx_g = 0;
-                    var gx_b = 0;
-                    var gx_a = 0;
-                    var center_y = (j + 0.5) * ratio_h;
-                    var yy_start = Math.floor(j * ratio_h);
-                    var yy_stop = Math.ceil((j + 1) * ratio_h);
-                    for (var yy = yy_start; yy < yy_stop; yy++) {
-                        var dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half;
-                        var center_x = (i + 0.5) * ratio_w;
-                        var w0 = dy * dy; //pre-calc part of w
-                        var xx_start = Math.floor(i * ratio_w);
-                        var xx_stop = Math.ceil((i + 1) * ratio_w);
-                        for (var xx = xx_start; xx < xx_stop; xx++) {
-                            var dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half;
-                            var w = Math.sqrt(w0 + dx * dx);
-                            if (w >= 1) {
-                                //pixel too far
-                                continue;
-                            }
-                            //hermite filter
-                            weight = 2 * w * w * w - 3 * w * w + 1;
-                            var pos_x = 4 * (xx + yy * width_source);
-                            //alpha
-                            gx_a += weight * data[pos_x + 3];
-                            weights_alpha += weight;
-                            //colors
-                            if (data[pos_x + 3] < 255)
-                                weight = weight * data[pos_x + 3] / 250;
-                            gx_r += weight * data[pos_x];
-                            gx_g += weight * data[pos_x + 1];
-                            gx_b += weight * data[pos_x + 2];
-                            weights += weight;
-                        }
-                    }
-                    data2[x2] = gx_r / weights;
-                    data2[x2 + 1] = gx_g / weights;
-                    data2[x2 + 2] = gx_b / weights;
-                    data2[x2 + 3] = gx_a / weights_alpha;
-                }
-            }
+    document.getElementById("avRun").addEventListener("click",()=>{ if(!busy) run(); });
+    document.getElementById("avReset").addEventListener("click",reset);
+    // clic en una capa -> popup
+    document.getElementById("avHost").addEventListener("click",e=>{
+      const h=e.target.closest(".av-hit"); if(h) openPop(+h.dataset.col);
+    });
 
-            //Ya que esta, exagerarlo. Blancos blancos y negros negros..?
+    // ----- reacción EN VIVO al dibujo real -----
+    function goLive(){
+      clearT(); busy=false; live=true;
+      document.querySelectorAll("#avSvg .av-box").forEach(x=>x.classList.add("lit"));
+      document.querySelectorAll("#avSvg .wire").forEach(x=>x.classList.add("flow"));
+      const dg=document.getElementById("avDigit"); if(dg) dg.style.display="none";
+    }
+    window.addEventListener("cnn-predict", e=>{
+      const probs=e.detail.probs, top=e.detail.top;
+      if(!live) goLive();
+      // imagen real de 28x28 en la entrada del diagrama
+      const pv=document.getElementById("preview28"), img=document.getElementById("avInputImg");
+      if(pv && img){
+        const u=pv.toDataURL();
+        img.setAttribute("href",u);
+        img.setAttributeNS("http://www.w3.org/1999/xlink","href",u);
+        img.style.opacity=1;
+      }
+      // salida real: resalta el dígito que la red cree ahora
+      document.querySelectorAll("#avSvg .av-box[data-d]").forEach(b=>b.classList.toggle("win", +b.dataset.d===top));
+      document.querySelectorAll("#avSvg .av-outlab").forEach(l=>l.classList.toggle("win", +l.dataset.d===top));
+      const t3=probs.map((p,d)=>[d,p]).sort((a,b)=>b[1]-a[1]).slice(0,3)
+                .map(([d,p])=>`${d}: ${Math.round(p*100)}%`).join(" · ");
+      document.getElementById("avCaption").innerHTML=`<b>En vivo:</b> la red cree que es <b>${top}</b>. &nbsp;<span style="color:var(--muted)">${t3}</span>`;
+    });
+    window.addEventListener("cnn-clear", reset);
 
-            for (var p=0; p < data2.length; p += 4) {
-                var gris = data2[p]; //Esta en blanco y negro
-
-                if (gris < 100) {
-                    gris = 0; //exagerarlo
-                } else {
-                    gris = 255; //al infinito
-                }
-
-                data2[p] = gris;
-                data2[p+1] = gris;
-                data2[p+2] = gris;
-            }
-
-
-            ctx2.putImageData(img2, 0, 0);
-        }
-
-      //Cargar modelo
-      (async () => {
-          console.log("Cargando modelo...");
-          modelo = await tf.loadLayersModel("model.json");
-          console.log("Modelo cargado...");
-      })();
-    </script>
-  </body>
+    buildSVG();
+  })();
+  </script>
+</body>
 </html>
